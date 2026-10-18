@@ -94,7 +94,7 @@ git branch -M main
 
 # 5. Crie um novo repositório vazio no seu GitHub (ex: gestor_estudos_bot)
 # Em seguida, vincule o repositório remoto (substitua pelo seu link do GitHub):
-git remote add origin https://github.com/SEU_USUARIO/gestor_estudos_bot.git
+git remote add origin https://github.com/lowfierd/gestor_estudos_bot.git
 
 # 6. Envie o código:
 git push -u origin main
@@ -114,7 +114,7 @@ O [PythonAnywhere](https://www.pythonanywhere.com/user/lowfield/) já possui sup
 
 2. **Clonar o Repositório do GitHub:**
    ```bash
-   git clone https://github.com/SEU_USUARIO/gestor_estudos_bot.git
+   git clone https://github.com/lowfierd/gestor_estudos_bot.git
    cd gestor_estudos_bot
    ```
 

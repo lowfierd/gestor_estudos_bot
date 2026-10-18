@@ -70,15 +70,39 @@ async def cmd_ajuda(message: Message):
     await message.answer(texto, parse_mode="Markdown")
 
 
-@router.message(Command("setcanal"))
+@router.message(Command("setcanal", "setregistro"))
 async def cmd_setcanal(message: Message):
     """
-    Vincula um canal de comprovantes para o casal.
-    Exemplo de uso: /setcanal @meu_canal_estudos
+    Vincula um canal ou um tópico de registro dentro de um grupo com fórum.
+    Exemplos de uso:
+    - No privado: /setcanal @meu_canal_estudos
+    - Dentro de um tópico do grupo: basta digitar /setregistro no tópico desejado!
     """
     args = message.text.split(maxsplit=1)
     target_chat = None
+    thread_id = getattr(message, "message_thread_id", None)
 
+    # Caso 1: Enviado diretamente dentro de um grupo/tópico
+    if message.chat.type in ["group", "supergroup"]:
+        target_chat = message.chat.id
+        title = message.chat.title or "Grupo de Estudos"
+        async with async_session() as session:
+            await crud.register_channel(
+                session=session,
+                channel_id=target_chat,
+                title=title,
+                message_thread_id=thread_id
+            )
+
+        topico_info = f" (Tópico ID: #{thread_id})" if thread_id else ""
+        await message.answer(
+            f"✅ *Chat de Registros Vinculado com Sucesso!*{topico_info}\n\n"
+            f"A partir de agora, todos os comprovantes com foto e resumos serão postados automaticamente aqui!",
+            parse_mode="Markdown"
+        )
+        return
+
+    # Caso 2: Passado via argumento ou executado no canal
     if len(args) > 1:
         target_chat = args[1].strip()
     elif message.chat.type == "channel":
@@ -86,10 +110,9 @@ async def cmd_setcanal(message: Message):
 
     if not target_chat:
         await message.answer(
-            "⚠️ *Como vincular o canal de comprovantes:*\n\n"
-            "1. Adicione o bot como *Administrador* do seu canal.\n"
-            "2. Envie o comando informando o @ do canal ou o ID:\n"
-            "Exemplo: `/setcanal @canal_estudos_casal`",
+            "⚠️ *Como vincular o local de registros e comprovantes:*\n\n"
+            "• *Se o grupo usa Tópicos (Fórum):* Basta entrar no tópico de 'Registros' e enviar `/setregistro` lá dentro!\n"
+            "• *Se usa um Canal:* Adicione o bot como admin do canal e envie `/setcanal @seu_canal`.",
             parse_mode="Markdown"
         )
         return
@@ -101,7 +124,8 @@ async def cmd_setcanal(message: Message):
                 session=session,
                 channel_id=chat.id,
                 title=chat.title,
-                username=chat.username
+                username=chat.username,
+                message_thread_id=None
             )
 
         await message.answer(
@@ -112,8 +136,8 @@ async def cmd_setcanal(message: Message):
         )
     except Exception as e:
         await message.answer(
-            f"❌ Não foi possível acessar o canal `{target_chat}`.\n"
-            f"Verifique se o bot foi adicionado como *Administrador* no canal com permissão para postar mensagens.\n"
+            f"❌ Não foi possível acessar `{target_chat}`.\n"
+            f"Verifique se o bot foi adicionado como *Administrador* com permissão para postar mensagens.\n"
             f"Detalhes: `{e}`",
             parse_mode="Markdown"
         )

@@ -257,17 +257,23 @@ async def register_channel(
     session: AsyncSession,
     channel_id: int,
     title: str | None = None,
-    username: str | None = None
+    username: str | None = None,
+    message_thread_id: int | None = None
 ) -> RegisteredChannel:
     """
-    Registra ou atualiza o canal oficial de comprovantes.
+    Registra ou atualiza o destino oficial de comprovantes (canal ou tópico de grupo/fórum).
     """
     stmt = select(RegisteredChannel).where(RegisteredChannel.channel_id == channel_id)
     result = await session.execute(stmt)
     channel = result.scalar_one_or_none()
 
     if not channel:
-        channel = RegisteredChannel(channel_id=channel_id, title=title, username=username)
+        channel = RegisteredChannel(
+            channel_id=channel_id,
+            title=title,
+            username=username,
+            message_thread_id=message_thread_id
+        )
         session.add(channel)
         await session.commit()
         await session.refresh(channel)
@@ -278,6 +284,9 @@ async def register_channel(
             updated = True
         if username and channel.username != username:
             channel.username = username
+            updated = True
+        if message_thread_id is not None and channel.message_thread_id != message_thread_id:
+            channel.message_thread_id = message_thread_id
             updated = True
         if updated:
             await session.commit()

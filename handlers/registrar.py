@@ -49,17 +49,17 @@ async def forward_to_evidence_channel(
     """
     Encaminha o comprovante da sessão de estudos (com foto ou texto) para o canal oficial do casal.
     """
-    target_channels = set()
+    targets = []
     if config.CHANNEL_ID:
-        target_channels.add(config.CHANNEL_ID)
+        targets.append((config.CHANNEL_ID, None))
 
     async with async_session() as session:
         channels_db = await crud.get_registered_channels(session)
         for ch in channels_db:
-            target_channels.add(ch.channel_id)
+            targets.append((ch.channel_id, ch.message_thread_id))
 
-    if not target_channels:
-        logger.info("Nenhum canal de comprovantes configurado para encaminhar.")
+    if not targets:
+        logger.info("Nenhum canal ou tópico de comprovantes configurado para encaminhar.")
         return
 
     duration_str = format_duration(minutes)
@@ -83,24 +83,26 @@ async def forward_to_evidence_channel(
 
     message_text = "\n".join(caption_lines)
 
-    for channel in target_channels:
+    for channel_id, thread_id in targets:
         try:
             if photo_file_id:
                 await bot.send_photo(
-                    chat_id=channel,
+                    chat_id=channel_id,
+                    message_thread_id=thread_id,
                     photo=photo_file_id,
                     caption=message_text,
                     parse_mode="Markdown"
                 )
             else:
                 await bot.send_message(
-                    chat_id=channel,
+                    chat_id=channel_id,
+                    message_thread_id=thread_id,
                     text=message_text,
                     parse_mode="Markdown"
                 )
-            logger.info(f"Comprovante de estudo encaminhado com sucesso para o canal {channel}")
+            logger.info(f"Comprovante encaminhado com sucesso para {channel_id} (tópico: {thread_id})")
         except Exception as e:
-            logger.error(f"Erro ao encaminhar comprovante para o canal {channel}: {e}")
+            logger.error(f"Erro ao encaminhar comprovante para {channel_id} (tópico: {thread_id}): {e}")
 
 
 @router.message(Command("estudar"))

@@ -79,17 +79,18 @@ class RegisteredGroup(Base):
 
 class RegisteredChannel(Base):
     """
-    Armazena o canal oficial para onde o bot encaminha os comprovantes com foto e relatório de estudos.
+    Armazena o destino oficial dos comprovantes (pode ser um canal ou um tópico de grupo/fórum).
     """
     __tablename__ = "registered_channels"
 
     channel_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    message_thread_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     title: Mapped[str | None] = mapped_column(String(200), nullable=True)
     username: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     def __repr__(self) -> str:
-        return f"<RegisteredChannel channel_id={self.channel_id} title='{self.title}'>"
+        return f"<RegisteredChannel channel_id={self.channel_id} thread_id={self.message_thread_id} title='{self.title}'>"
 
 
 async def init_db() -> None:

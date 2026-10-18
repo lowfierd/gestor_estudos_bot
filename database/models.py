@@ -61,6 +61,20 @@ class StudySession(Base):
         return f"<StudySession id={self.id} user_id={self.user_id} subject='{self.subject}' duration={self.duration_minutes}m>"
 
 
+class RegisteredGroup(Base):
+    """
+    Armazena o ID dos grupos onde o bot foi adicionado para envio automático de avisos.
+    """
+    __tablename__ = "registered_groups"
+
+    chat_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<RegisteredGroup chat_id={self.chat_id} title='{self.title}'>"
+
+
 async def init_db() -> None:
     """
     Cria as tabelas no banco de dados caso ainda não existam.

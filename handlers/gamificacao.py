@@ -1,4 +1,4 @@
-from aiogram import Router
+from aiogram import Router, F
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
 
@@ -21,6 +21,7 @@ BADGES = [
 async def cmd_start(message: Message):
     """
     Mensagem de boas-vindas e introdução ao bot do casal.
+    Registra automaticamente o usuário e o grupo (caso enviado no grupo).
     """
     user = message.from_user
     async with async_session() as session:
@@ -30,6 +31,13 @@ async def cmd_start(message: Message):
             first_name=user.first_name,
             username=user.username
         )
+        # Se o comando for executado dentro de um grupo, salva o grupo automaticamente!
+        if message.chat.type in ["group", "supergroup"]:
+            await crud.register_group(
+                session=session,
+                chat_id=message.chat.id,
+                title=message.chat.title
+            )
 
     texto = (
         f"👋 Olá, *{user.first_name}*! Bem-vindo(a) ao seu *Gestor de Estudos do Casal*! 🎯\n\n"
@@ -83,3 +91,33 @@ async def cmd_badges(message: Message):
         lines.append("")
 
     await message.answer("\n".join(lines), parse_mode="Markdown")
+
+
+@router.message(F.new_chat_members)
+async def on_bot_added_to_group(message: Message):
+    """
+    Quando o bot é adicionado a um grupo do casal, ele se apresenta e
+    salva o ID do grupo automaticamente no banco.
+    """
+    bot_user = await message.bot.get_me()
+    added_bot = any(user.id == bot_user.id for user in message.new_chat_members)
+
+    if added_bot:
+        async with async_session() as session:
+            await crud.register_group(
+                session=session,
+                chat_id=message.chat.id,
+                title=message.chat.title
+            )
+
+        await message.answer(
+            f"🎉 *Gestor de Estudos Ativado no Grupo!*\n\n"
+            f"Grupo *'{message.chat.title}'* registrado com sucesso.\n"
+            f"A partir de agora vocês podem:\n"
+            f"• Usar `/estudar` para registrar as horas em 2 cliques.\n"
+            f"• Usar `/ranking` para ver o gráfico comparativo da semana.\n"
+            f"• Receber o cutucão automático às 20h00 se um de vocês ainda não tiver estudado!\n\n"
+            f"Bons estudos ao casal! 📚❤️",
+            parse_mode="Markdown"
+        )
+

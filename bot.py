@@ -76,14 +76,25 @@ async def job_nudge_20h(bot: Bot):
             f"Orgulho mútuo e consistência mantida!"
         )
 
-    # Envia para o grupo compartilhado se configurado, ou para os chats privados
+    # Envia para os grupos registrados no banco ou para o configurado no .env
+    target_chats = set()
     if config.GROUP_CHAT_ID:
-        try:
-            await bot.send_message(chat_id=config.GROUP_CHAT_ID, text=msg_text, parse_mode=ParseMode.MARKDOWN)
-        except Exception as e:
-            logger.error(f"Erro ao enviar nudge para o grupo {config.GROUP_CHAT_ID}: {e}")
+        target_chats.add(config.GROUP_CHAT_ID)
+
+    async with async_session() as session:
+        registered_groups = await crud.get_registered_groups(session)
+        for g in registered_groups:
+            target_chats.add(g.chat_id)
+
+    if target_chats:
+        for chat_id in target_chats:
+            try:
+                await bot.send_message(chat_id=chat_id, text=msg_text, parse_mode=ParseMode.MARKDOWN)
+                logger.info(f"Nudge das 20h enviado com sucesso para o grupo {chat_id}")
+            except Exception as e:
+                logger.error(f"Erro ao enviar nudge para o grupo {chat_id}: {e}")
     else:
-        # Se não houver grupo configurado, envia no privado de ambos
+        # Se não houver grupo registrado ainda, envia no privado de ambos
         for user_data in [user_a, user_b]:
             try:
                 await bot.send_message(chat_id=user_data["user"].telegram_id, text=msg_text, parse_mode=ParseMode.MARKDOWN)

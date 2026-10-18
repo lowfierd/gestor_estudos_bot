@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from typing import Any
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from database.models import User, StudySession
+from database.models import User, StudySession, RegisteredGroup
 
 
 async def get_or_create_user(
@@ -216,3 +216,34 @@ async def get_weekly_stats(
         "users": user_data,
         "subjects": subject_data
     }
+
+
+async def register_group(session: AsyncSession, chat_id: int, title: str | None = None) -> RegisteredGroup:
+    """
+    Registra ou atualiza o grupo mútuo do casal automaticamente.
+    """
+    stmt = select(RegisteredGroup).where(RegisteredGroup.chat_id == chat_id)
+    result = await session.execute(stmt)
+    group = result.scalar_one_or_none()
+
+    if not group:
+        group = RegisteredGroup(chat_id=chat_id, title=title)
+        session.add(group)
+        await session.commit()
+        await session.refresh(group)
+    elif title and group.title != title:
+        group.title = title
+        await session.commit()
+        await session.refresh(group)
+
+    return group
+
+
+async def get_registered_groups(session: AsyncSession) -> list[RegisteredGroup]:
+    """
+    Retorna os grupos registrados onde o bot está ativo.
+    """
+    stmt = select(RegisteredGroup)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+

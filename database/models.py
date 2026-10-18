@@ -52,6 +52,8 @@ class StudySession(Base):
     subject: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     session_date: Mapped[date] = mapped_column(Date, default=date.today, nullable=False, index=True)
+    photo_file_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relacionamento de volta com o usuário
@@ -73,6 +75,21 @@ class RegisteredGroup(Base):
 
     def __repr__(self) -> str:
         return f"<RegisteredGroup chat_id={self.chat_id} title='{self.title}'>"
+
+
+class RegisteredChannel(Base):
+    """
+    Armazena o canal oficial para onde o bot encaminha os comprovantes com foto e relatório de estudos.
+    """
+    __tablename__ = "registered_channels"
+
+    channel_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    username: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<RegisteredChannel channel_id={self.channel_id} title='{self.title}'>"
 
 
 async def init_db() -> None:

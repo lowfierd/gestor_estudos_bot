@@ -1,24 +1,106 @@
-from aiogram import Router, F
+from datetime import datetime
+import logging
+from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery
 
+import config
 from database.models import async_session
 from database import crud
 from utils.teclados import (
     SubjectCallback,
     DurationCallback,
     get_subjects_keyboard,
-    get_durations_keyboard
+    get_durations_keyboard,
+    get_photo_prompt_keyboard
 )
 
+logger = logging.getLogger("RegistrarHandler")
 router = Router(name="registrar_router")
 
 
 class StudyRegistrationFSM(StatesGroup):
     choosing_subject = State()
     choosing_duration = State()
+    waiting_photo = State()
+
+
+def format_duration(minutes: int) -> str:
+    h = minutes // 60
+    m = minutes % 60
+    if h > 0 and m > 0:
+        return f"{h}h {m}m"
+    elif h > 0:
+        return f"{h}h"
+    return f"{minutes} minutos"
+
+
+async def forward_to_evidence_channel(
+    bot: Bot,
+    user_name: str,
+    subject: str,
+    minutes: int,
+    streak: int,
+    photo_file_id: str | None = None,
+    notes: str | None = None
+) -> None:
+    """
+    Encaminha o comprovante da sessão de estudos (com foto ou texto) para o canal oficial do casal.
+    """
+    target_channels = set()
+    if config.CHANNEL_ID:
+        target_channels.add(config.CHANNEL_ID)
+
+    async with async_session() as session:
+        channels_db = await crud.get_registered_channels(session)
+        for ch in channels_db:
+            target_channels.add(ch.channel_id)
+
+    if not target_channels:
+        logger.info("Nenhum canal de comprovantes configurado para encaminhar.")
+        return
+
+    duration_str = format_duration(minutes)
+    now_str = datetime.now().strftime("%d/%m/%Y às %H:%M")
+
+    caption_lines = [
+        "📸 *NOVO REGISTRO DE ESTUDO CONFIRMADO!*",
+        "━━━━━━━━━━━━━━━━━━━━",
+        f"👤 *Estudante:* {user_name}",
+        f"📚 *Disciplina:* {subject}",
+        f"⏱️ *Duração:* {duration_str}",
+        f"🔥 *Ofensiva:* {streak} dia(s) consecutivos",
+        f"📅 *Data:* {now_str}",
+    ]
+
+    if notes:
+        caption_lines.append(f"📝 *Anotações:* _{notes}_")
+
+    caption_lines.append("━━━━━━━━━━━━━━━━━━━━")
+    caption_lines.append("🎯 _Consistência diária do casal!_")
+
+    message_text = "\n".join(caption_lines)
+
+    for channel in target_channels:
+        try:
+            if photo_file_id:
+                await bot.send_photo(
+                    chat_id=channel,
+                    photo=photo_file_id,
+                    caption=message_text,
+                    parse_mode="Markdown"
+                )
+            else:
+                await bot.send_message(
+                    chat_id=channel,
+                    text=message_text,
+                    parse_mode="Markdown"
+                )
+            logger.info(f"Comprovante de estudo encaminhado com sucesso para o canal {channel}")
+        except Exception as e:
+            logger.error(f"Erro ao encaminhar comprovante para o canal {channel}: {e}")
 
 
 @router.message(Command("estudar"))
@@ -73,16 +155,41 @@ async def process_back_to_subjects(callback: CallbackQuery, state: FSMContext):
 @router.callback_query(DurationCallback.filter(), StudyRegistrationFSM.choosing_duration)
 async def process_duration_chosen(callback: CallbackQuery, callback_data: DurationCallback, state: FSMContext):
     """
-    Recebe a duração, salva os dados no banco, atualiza a ofensiva (streak) e finaliza o estado.
+    Recebe a duração e solicita a foto como comprovante para o canal.
     """
     minutes = callback_data.minutes
     data = await state.get_data()
     subject_name = data.get("chosen_subject", "Estudo Geral")
 
-    user = callback.from_user
-    hours_formatted = f"{minutes // 60}h {minutes % 60}m" if minutes % 60 else f"{minutes // 60}h"
-    if minutes < 60:
-        hours_formatted = f"{minutes} minutos"
+    await state.update_data(chosen_duration=minutes)
+    await state.set_state(StudyRegistrationFSM.waiting_photo)
+
+    duration_str = format_duration(minutes)
+    await callback.message.edit_text(
+        text=(
+            f"📚 *{subject_name}* — ⏱️ *{duration_str}*\n\n"
+            f"📸 *Comprovante de Estudos (Opcional):*\n"
+            f"Envie uma *foto* agora para registrar o que você estudou (você pode incluir uma legenda descrevendo o conteúdo).\n\n"
+            f"_O comprovante será postado no canal do casal! Ou clique em Pular Foto abaixo:_"
+        ),
+        parse_mode="Markdown",
+        reply_markup=get_photo_prompt_keyboard()
+    )
+    await callback.answer()
+
+
+@router.message(F.photo, StudyRegistrationFSM.waiting_photo)
+async def process_photo_received(message: Message, state: FSMContext):
+    """
+    Salva o registro com a foto anexada e a legenda como anotação.
+    """
+    data = await state.get_data()
+    subject_name = data.get("chosen_subject", "Estudo Geral")
+    minutes = data.get("chosen_duration", 30)
+
+    photo_file_id = message.photo[-1].file_id
+    notes = message.caption or None
+    user = message.from_user
 
     async with async_session() as session:
         session_obj, current_streak, streak_increased = await crud.add_study_session(
@@ -91,28 +198,92 @@ async def process_duration_chosen(callback: CallbackQuery, callback_data: Durati
             first_name=user.first_name,
             username=user.username,
             subject=subject_name,
-            duration_minutes=minutes
+            duration_minutes=minutes,
+            photo_file_id=photo_file_id,
+            notes=notes
         )
 
-    # Mensagem de gamificação com ofensiva (streak)
+    # Encaminha o comprovante com a foto para o canal
+    await forward_to_evidence_channel(
+        bot=message.bot,
+        user_name=user.first_name,
+        subject=subject_name,
+        minutes=minutes,
+        streak=current_streak,
+        photo_file_id=photo_file_id,
+        notes=notes
+    )
+
+    duration_str = format_duration(minutes)
     streak_msg = f"🔥 *Ofensiva:* {current_streak} dia(s) consecutivo(s)!"
     if streak_increased and current_streak > 1:
-        streak_msg += " 📈 _Você manteve o fogo aceso hoje!_"
-    elif current_streak == 1:
-        streak_msg += " ✨ _Primeiro dia do ciclo! Continue firme amanhã!_"
+        streak_msg += " 📈 _Ofensiva aumentada!_"
 
-    await callback.message.edit_text(
+    await message.answer(
         text=(
-            f"✅ *Sessão de Estudo Registrada com Sucesso!*\n\n"
+            f"✅ *Estudo Comprovado e Registrado!*\n\n"
             f"👤 Estudante: *{user.first_name}*\n"
             f"📚 Disciplina: *{subject_name}*\n"
-            f"⏱️ Tempo: *{hours_formatted}*\n\n"
+            f"⏱️ Tempo: *{duration_str}*\n"
+            f"📸 *Foto:* Enviada com sucesso para o canal do casal!\n\n"
             f"{streak_msg}\n\n"
-            f"🏆 _Seu parceiro(a) foi avisado(a) ou verá seu avanço no ranking!_"
+            f"🏆 _Parabéns pelo foco de hoje!_"
         ),
         parse_mode="Markdown"
     )
-    await callback.answer(text=f"Registrado: +{minutes}m de {subject_name}!", show_alert=False)
+    await state.clear()
+
+
+@router.callback_query(F.data == "skip_photo", StudyRegistrationFSM.waiting_photo)
+async def process_skip_photo(callback: CallbackQuery, state: FSMContext):
+    """
+    Salva o registro sem foto quando o usuário prefere pular essa etapa.
+    """
+    data = await state.get_data()
+    subject_name = data.get("chosen_subject", "Estudo Geral")
+    minutes = data.get("chosen_duration", 30)
+    user = callback.from_user
+
+    async with async_session() as session:
+        session_obj, current_streak, streak_increased = await crud.add_study_session(
+            session=session,
+            telegram_id=user.id,
+            first_name=user.first_name,
+            username=user.username,
+            subject=subject_name,
+            duration_minutes=minutes,
+            photo_file_id=None,
+            notes=None
+        )
+
+    # Encaminha o registro em texto para o canal
+    await forward_to_evidence_channel(
+        bot=callback.bot,
+        user_name=user.first_name,
+        subject=subject_name,
+        minutes=minutes,
+        streak=current_streak,
+        photo_file_id=None,
+        notes=None
+    )
+
+    duration_str = format_duration(minutes)
+    streak_msg = f"🔥 *Ofensiva:* {current_streak} dia(s) consecutivo(s)!"
+    if streak_increased and current_streak > 1:
+        streak_msg += " 📈 _Ofensiva aumentada!_"
+
+    await callback.message.edit_text(
+        text=(
+            f"✅ *Sessão Registrada com Sucesso!*\n\n"
+            f"👤 Estudante: *{user.first_name}*\n"
+            f"📚 Disciplina: *{subject_name}*\n"
+            f"⏱️ Tempo: *{duration_str}*\n\n"
+            f"{streak_msg}\n\n"
+            f"📢 _Registro postado no canal do casal!_"
+        ),
+        parse_mode="Markdown"
+    )
+    await callback.answer(text=f"Registrado: +{duration_str} de {subject_name}!", show_alert=False)
     await state.clear()
 
 

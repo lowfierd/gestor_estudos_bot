@@ -86,3 +86,15 @@ def get_cancel_keyboard() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="❌ Cancelar", callback_data="cancel_action")
     return builder.as_markup()
+
+
+def get_photo_prompt_keyboard() -> InlineKeyboardMarkup:
+    """
+    Teclado com opção de pular foto ou cancelar o registro.
+    """
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⏭️ Pular Foto (Salvar direto)", callback_data="skip_photo")
+    builder.button(text="❌ Cancelar", callback_data="cancel_action")
+    builder.adjust(1)
+    return builder.as_markup()
+

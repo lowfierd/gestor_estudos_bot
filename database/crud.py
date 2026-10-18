@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from typing import Any
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
-from database.models import User, StudySession, RegisteredGroup
+from database.models import User, StudySession, RegisteredGroup, RegisteredChannel
 
 
 async def get_or_create_user(
@@ -91,10 +91,13 @@ async def add_study_session(
     username: str | None,
     subject: str,
     duration_minutes: int,
-    session_date: date | None = None
+    session_date: date | None = None,
+    photo_file_id: str | None = None,
+    notes: str | None = None
 ) -> tuple[StudySession, int, bool]:
     """
-    Registra uma sessão de estudo, calcula e persiste a ofensiva (streak).
+    Registra uma sessão de estudo, calcula e persiste a ofensiva (streak),
+    com suporte a comprovante em foto e anotações.
     Retorna: (sessao_criada, streak_atual, streak_aumentou)
     """
     if session_date is None:
@@ -115,7 +118,9 @@ async def add_study_session(
         user_id=telegram_id,
         subject=subject,
         duration_minutes=duration_minutes,
-        session_date=session_date
+        session_date=session_date,
+        photo_file_id=photo_file_id,
+        notes=notes
     )
     session.add(study_session)
 
@@ -246,4 +251,47 @@ async def get_registered_groups(session: AsyncSession) -> list[RegisteredGroup]:
     stmt = select(RegisteredGroup)
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def register_channel(
+    session: AsyncSession,
+    channel_id: int,
+    title: str | None = None,
+    username: str | None = None
+) -> RegisteredChannel:
+    """
+    Registra ou atualiza o canal oficial de comprovantes.
+    """
+    stmt = select(RegisteredChannel).where(RegisteredChannel.channel_id == channel_id)
+    result = await session.execute(stmt)
+    channel = result.scalar_one_or_none()
+
+    if not channel:
+        channel = RegisteredChannel(channel_id=channel_id, title=title, username=username)
+        session.add(channel)
+        await session.commit()
+        await session.refresh(channel)
+    else:
+        updated = False
+        if title and channel.title != title:
+            channel.title = title
+            updated = True
+        if username and channel.username != username:
+            channel.username = username
+            updated = True
+        if updated:
+            await session.commit()
+            await session.refresh(channel)
+
+    return channel
+
+
+async def get_registered_channels(session: AsyncSession) -> list[RegisteredChannel]:
+    """
+    Retorna os canais cadastrados para envio de comprovantes.
+    """
+    stmt = select(RegisteredChannel)
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
 

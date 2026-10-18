@@ -20,6 +20,15 @@ if GROUP_CHAT_ID:
     except ValueError:
         pass
 
+# ID ou @username do Canal oficial de comprovantes (onde o bot posta fotos e registros)
+CHANNEL_ID = os.getenv("CHANNEL_ID", None)
+if CHANNEL_ID:
+    try:
+        CHANNEL_ID = int(CHANNEL_ID)
+    except ValueError:
+        # Se for string (ex: @canal_estudos), mantém string
+        pass
+
 # URL de conexão do banco de dados (SQLite assíncrono padrão)
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite+aiosqlite:///{BASE_DIR / 'database' / 'gestor_estudos.db'}")
 

@@ -61,12 +61,63 @@ async def cmd_ajuda(message: Message):
     """
     texto = (
         "📖 *Guia de Uso do Gestor de Estudos*\n\n"
-        "1️⃣ Para registrar, envie `/estudar` e clique na matéria e no tempo.\n"
-        "2️⃣ Não deixe passar das 20h para não levar cutucão do bot!\n"
-        "3️⃣ Aos domingos ou quando quiser, use `/ranking` para ver o gráfico de barras e pizza da semana.\n"
-        "4️⃣ Mantenha a ofensiva diária para desbloquear badges em `/badges`!"
+        "1️⃣ Para registrar, envie `/estudar` no privado ou grupo, selecione a matéria, o tempo e anexe sua *foto comprovatória*!\n"
+        "2️⃣ Os comprovantes com foto e anotações são encaminhados automaticamente para o canal do casal.\n"
+        "3️⃣ Para definir o canal de comprovantes, adicione o bot como admin do canal e use `/setcanal @nomedocanal`.\n"
+        "4️⃣ Não deixe passar das 20h para não levar cutucão do bot!\n"
+        "5️⃣ Use `/ranking` para ver o gráfico comparativo da semana."
     )
     await message.answer(texto, parse_mode="Markdown")
+
+
+@router.message(Command("setcanal"))
+async def cmd_setcanal(message: Message):
+    """
+    Vincula um canal de comprovantes para o casal.
+    Exemplo de uso: /setcanal @meu_canal_estudos
+    """
+    args = message.text.split(maxsplit=1)
+    target_chat = None
+
+    if len(args) > 1:
+        target_chat = args[1].strip()
+    elif message.chat.type == "channel":
+        target_chat = message.chat.id
+
+    if not target_chat:
+        await message.answer(
+            "⚠️ *Como vincular o canal de comprovantes:*\n\n"
+            "1. Adicione o bot como *Administrador* do seu canal.\n"
+            "2. Envie o comando informando o @ do canal ou o ID:\n"
+            "Exemplo: `/setcanal @canal_estudos_casal`",
+            parse_mode="Markdown"
+        )
+        return
+
+    try:
+        chat = await message.bot.get_chat(target_chat)
+        async with async_session() as session:
+            await crud.register_channel(
+                session=session,
+                channel_id=chat.id,
+                title=chat.title,
+                username=chat.username
+            )
+
+        await message.answer(
+            f"✅ *Canal Vinculado com Sucesso!*\n\n"
+            f"📢 Canal: *{chat.title}*\n"
+            f"A partir de agora, todas as fotos e registros de estudos serão encaminhados para ele!",
+            parse_mode="Markdown"
+        )
+    except Exception as e:
+        await message.answer(
+            f"❌ Não foi possível acessar o canal `{target_chat}`.\n"
+            f"Verifique se o bot foi adicionado como *Administrador* no canal com permissão para postar mensagens.\n"
+            f"Detalhes: `{e}`",
+            parse_mode="Markdown"
+        )
+
 
 
 @router.message(Command("badges"))

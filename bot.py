@@ -1,9 +1,12 @@
 import asyncio
 import logging
 from datetime import date
+import os
+from pathlib import Path
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -112,9 +115,27 @@ async def main():
     logger.info("Criando/verificando tabelas do banco de dados SQLite...")
     await init_db()
 
+    # Configuração de Proxy (obrigatório para contas gratuitas do PythonAnywhere)
+    proxy = os.getenv("https_proxy") or os.getenv("http_proxy") or os.getenv("HTTPS_PROXY")
+    is_pythonanywhere = (
+        "PYTHONANYWHERE_DOMAIN" in os.environ
+        or "PYTHONANYWHERE_SITE" in os.environ
+        or Path("/etc/pythonanywhere").exists()
+        or "pythonanywhere" in os.environ.get("HOME", "").lower()
+    )
+    if not proxy and is_pythonanywhere:
+        proxy = "http://proxy.server:3128"
+
+    if proxy:
+        logger.info(f"Conectando ao Telegram através do proxy: {proxy}")
+        bot_session = AiohttpSession(proxy=proxy)
+    else:
+        bot_session = None
+
     bot = Bot(
         token=config.BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN)
+        default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN),
+        session=bot_session
     )
     dp = Dispatcher()
 

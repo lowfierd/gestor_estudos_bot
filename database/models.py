@@ -93,6 +93,21 @@ class RegisteredChannel(Base):
         return f"<RegisteredChannel channel_id={self.channel_id} thread_id={self.message_thread_id} title='{self.title}'>"
 
 
+class Subject(Base):
+    """
+    Disciplinas de estudo cadastradas para o casal.
+    """
+    __tablename__ = "subjects"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    use_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<Subject id={self.id} name='{self.name}' use_count={self.use_count}>"
+
+
 async def init_db() -> None:
     """
     Cria as tabelas no banco de dados caso ainda não existam.

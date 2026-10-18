@@ -109,16 +109,57 @@ async def forward_to_evidence_channel(
 async def cmd_estudar(message: Message, state: FSMContext):
     """
     Inicia o fluxo de registro de estudo via teclado inline.
+    Exibe as 6 disciplinas mais usadas, com botão de ver mais caso haja outras.
     """
     await state.clear()
     await state.set_state(StudyRegistrationFSM.choosing_subject)
+
+    async with async_session() as session:
+        top_names, all_names = await crud.get_top_and_all_subjects(session, top_limit=6)
+
+    has_more = len(all_names) > len(top_names)
 
     await message.answer(
         text="📖 *Hora de registrar seu progresso!*\n\n"
              "Selecione abaixo a *disciplina* que você estudou:",
         parse_mode="Markdown",
-        reply_markup=get_subjects_keyboard()
+        reply_markup=get_subjects_keyboard(subjects=top_names, has_more=has_more, show_all=False)
     )
+
+
+@router.callback_query(F.data == "show_more_subjects", StudyRegistrationFSM.choosing_subject)
+async def process_show_more_subjects(callback: CallbackQuery):
+    """
+    Expande a lista para exibir todas as matérias cadastradas.
+    """
+    async with async_session() as session:
+        top_names, all_names = await crud.get_top_and_all_subjects(session, top_limit=6)
+
+    await callback.message.edit_text(
+        text="📖 *Todas as Disciplinas Cadastradas:*\n\n"
+             "Selecione a disciplina que você estudou:",
+        parse_mode="Markdown",
+        reply_markup=get_subjects_keyboard(subjects=all_names, has_more=False, show_all=True)
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "show_top_subjects", StudyRegistrationFSM.choosing_subject)
+async def process_show_top_subjects(callback: CallbackQuery):
+    """
+    Recolhe a lista para exibir apenas as 6 mais usadas.
+    """
+    async with async_session() as session:
+        top_names, all_names = await crud.get_top_and_all_subjects(session, top_limit=6)
+
+    has_more = len(all_names) > len(top_names)
+    await callback.message.edit_text(
+        text="📖 *Hora de registrar seu progresso!*\n\n"
+             "Selecione abaixo a *disciplina* que você estudou:",
+        parse_mode="Markdown",
+        reply_markup=get_subjects_keyboard(subjects=top_names, has_more=has_more, show_all=False)
+    )
+    await callback.answer()
 
 
 @router.callback_query(SubjectCallback.filter(), StudyRegistrationFSM.choosing_subject)
@@ -145,11 +186,15 @@ async def process_back_to_subjects(callback: CallbackQuery, state: FSMContext):
     Permite voltar para a escolha da matéria sem perder o fluxo.
     """
     await state.set_state(StudyRegistrationFSM.choosing_subject)
+    async with async_session() as session:
+        top_names, all_names = await crud.get_top_and_all_subjects(session, top_limit=6)
+
+    has_more = len(all_names) > len(top_names)
     await callback.message.edit_text(
         text="📖 *Hora de registrar seu progresso!*\n\n"
              "Selecione abaixo a *disciplina* que você estudou:",
         parse_mode="Markdown",
-        reply_markup=get_subjects_keyboard()
+        reply_markup=get_subjects_keyboard(subjects=top_names, has_more=has_more, show_all=False)
     )
     await callback.answer()
 

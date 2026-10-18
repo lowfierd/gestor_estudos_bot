@@ -1,8 +1,8 @@
 from datetime import date, timedelta
 from typing import Any
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from database.models import User, StudySession, RegisteredGroup, RegisteredChannel
+from database.models import User, StudySession, RegisteredGroup, RegisteredChannel, Subject
 
 
 async def get_or_create_user(
@@ -123,6 +123,15 @@ async def add_study_session(
         notes=notes
     )
     session.add(study_session)
+
+    # Atualiza a contagem de uso da disciplina
+    subj_stmt = select(Subject).where(Subject.name == subject)
+    subj_res = await session.execute(subj_stmt)
+    subj_obj = subj_res.scalar_one_or_none()
+    if subj_obj:
+        subj_obj.use_count += 1
+    else:
+        session.add(Subject(name=subject, use_count=1))
 
     await session.commit()
     await session.refresh(study_session)
@@ -302,5 +311,75 @@ async def get_registered_channels(session: AsyncSession) -> list[RegisteredChann
     stmt = select(RegisteredChannel)
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+# Matérias iniciais padrão caso o banco esteja novo
+INITIAL_SUBJECTS = ["Direito", "Programação", "Idiomas", "Concursos", "Leitura / Geral", "Matemática"]
+
+
+async def ensure_default_subjects(session: AsyncSession) -> None:
+    """
+    Garante que existam matérias padrão no banco caso a tabela esteja vazia.
+    """
+    stmt = select(func.count(Subject.id))
+    result = await session.execute(stmt)
+    count = result.scalar() or 0
+    if count == 0:
+        for name in INITIAL_SUBJECTS:
+            session.add(Subject(name=name, use_count=0))
+        await session.commit()
+
+
+async def add_subject(session: AsyncSession, name: str) -> tuple[Subject, bool]:
+    """
+    Cadastra uma nova disciplina. Retorna (subject, criado_novo: bool).
+    """
+    clean_name = name.strip()
+    stmt = select(Subject).where(func.lower(Subject.name) == func.lower(clean_name))
+    result = await session.execute(stmt)
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing, False
+
+    subject = Subject(name=clean_name, use_count=0)
+    session.add(subject)
+    await session.commit()
+    await session.refresh(subject)
+    return subject, True
+
+
+async def remove_subject(session: AsyncSession, name_or_id: str | int) -> bool:
+    """
+    Remove uma disciplina cadastrada pelo nome ou ID.
+    """
+    if isinstance(name_or_id, int) or (isinstance(name_or_id, str) and name_or_id.isdigit()):
+        stmt = delete(Subject).where(Subject.id == int(name_or_id))
+    else:
+        stmt = delete(Subject).where(func.lower(Subject.name) == func.lower(str(name_or_id).strip()))
+    
+    result = await session.execute(stmt)
+    await session.commit()
+    return result.rowcount > 0
+
+
+async def get_all_subjects(session: AsyncSession) -> list[Subject]:
+    """
+    Retorna todas as disciplinas ordenadas pelas mais usadas (use_count desc).
+    """
+    await ensure_default_subjects(session)
+    stmt = select(Subject).order_by(Subject.use_count.desc(), Subject.name.asc())
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_top_and_all_subjects(session: AsyncSession, top_limit: int = 6) -> tuple[list[str], list[str]]:
+    """
+    Retorna uma tupla: (top_6_materias, todas_as_materias) ordenadas por frequência.
+    """
+    subjects = await get_all_subjects(session)
+    all_names = [s.name for s in subjects]
+    top_names = all_names[:top_limit]
+    return top_names, all_names
+
 
 

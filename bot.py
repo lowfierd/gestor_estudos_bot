@@ -13,7 +13,7 @@ from apscheduler.triggers.cron import CronTrigger
 import config
 from database.models import init_db, async_session
 from database import crud
-from handlers import registrar, relatorios, gamificacao
+from handlers import registrar, relatorios, gamificacao, materias
 
 # Configuração de Logs
 logging.basicConfig(
@@ -141,6 +141,7 @@ async def main():
 
     # Registro dos Routers modulares
     dp.include_router(gamificacao.router)
+    dp.include_router(materias.router)
     dp.include_router(registrar.router)
     dp.include_router(relatorios.router)
 

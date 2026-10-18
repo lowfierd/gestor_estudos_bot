@@ -97,8 +97,12 @@ python bot.py
 | Comando | Descrição |
 |---|---|
 | `/start` | Apresenta o bot e cadastra o usuário no sistema automaticamente. |
-| `/estudar` | Inicia o fluxo interativo: escolhe matéria, tempo e anexa a foto de comprovante. |
-| `/setcanal` | Vincula o canal de comprovantes (ex: `/setcanal @canal_casal`). |
+| `/estudar` | Inicia o fluxo interativo: exibe as 6 disciplinas mais estudadas (com opção de ver mais), tempo e foto de comprovante. |
+| `/addmateria` | Cadastra uma nova disciplina (ex: `/addmateria Economia`). |
+| `/removermateria` | Abre menu com botões para excluir uma disciplina em 1 clique. |
+| `/materias` | Lista todas as disciplinas e a contagem de vezes estudadas. |
+| `/setregistro` | Vincula o tópico do grupo com fórum como mural oficial de comprovantes. |
+| `/setcanal` | Vincula um canal de comprovantes (ex: `/setcanal @canal_casal`). |
 | `/ranking` | Gera e envia o gráfico comparativo da semana (barras + pizza). |
 | `/hoje` | Mostra quem já bateu o ponto de estudos no dia. |
 | `/ofensiva` | Exibe o contador de dias seguidos (streaks) de cada um. |

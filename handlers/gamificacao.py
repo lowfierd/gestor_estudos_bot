@@ -43,7 +43,9 @@ async def cmd_start(message: Message):
         f"👋 Olá, *{user.first_name}*! Bem-vindo(a) ao seu *Gestor de Estudos do Casal*! 🎯\n\n"
         "O objetivo deste bot é manter você e seu amor motivados, consistentes e com prestação de contas mútua.\n\n"
         "📌 *Comandos Rápidos:*\n"
-        "• `/estudar` - Registra sua sessão de estudo em 2 cliques.\n"
+        "• `/foco` - Inicia o cronômetro ao vivo de foco!\n"
+        "• `/parar` - Finaliza o cronômetro e salva as horas.\n"
+        "• `/estudar` - Menu de estudo (cronômetro ou registro manual).\n"
         "• `/ranking` - Gera o gráfico comparativo semanal do casal.\n"
         "• `/hoje` - Mostra quem já estudou hoje e quem ainda está devendo.\n"
         "• `/ofensiva` - Placar de dias consecutivos (streaks).\n"
@@ -61,11 +63,11 @@ async def cmd_ajuda(message: Message):
     """
     texto = (
         "📖 *Guia de Uso do Gestor de Estudos*\n\n"
-        "1️⃣ Para registrar, envie `/estudar` no privado ou grupo, selecione a matéria, o tempo e anexe sua *foto comprovatória*!\n"
-        "2️⃣ Os comprovantes com foto e anotações são encaminhados automaticamente para o canal do casal.\n"
-        "3️⃣ Para definir o canal de comprovantes, adicione o bot como admin do canal e use `/setcanal @nomedocanal`.\n"
-        "4️⃣ Não deixe passar das 20h para não levar cutucão do bot!\n"
-        "5️⃣ Use `/ranking` para ver o gráfico comparativo da semana."
+        "⏱️ *Cronômetro ao Vivo:* Digite `/foco`, escolha a matéria e comece a estudar! Quando terminar, use `/parar` ou o botão de concluir.\n"
+        "📝 *Registro Manual:* Use `/estudar` para escolher entre o cronômetro ou registrar um tempo já concluído (ex: 30m, 1h, 2h).\n"
+        "📸 *Comprovantes:* Fotos e anotações são encaminhadas automaticamente para o canal do casal.\n"
+        "📢 *Vincular Canal:* Adicione o bot como admin do canal e use `/setcanal @nomedocanal`.\n"
+        "📊 *Relatórios:* Use `/ranking` para ver o gráfico semanal e `/hoje` para o status diário."
     )
     await message.answer(texto, parse_mode="Markdown")
 

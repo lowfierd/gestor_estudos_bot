@@ -1,8 +1,8 @@
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from typing import Any
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from database.models import User, StudySession, RegisteredGroup, RegisteredChannel, Subject
+from database.models import User, StudySession, RegisteredGroup, RegisteredChannel, Subject, ActiveTimer
 
 
 async def get_or_create_user(
@@ -380,6 +380,90 @@ async def get_top_and_all_subjects(session: AsyncSession, top_limit: int = 6) ->
     all_names = [s.name for s in subjects]
     top_names = all_names[:top_limit]
     return top_names, all_names
+
+
+# ==========================================
+# GESTÃO DE CRONÔMETRO AO VIVO (ACTIVE TIMER)
+# ==========================================
+
+async def get_active_timer(session: AsyncSession, user_id: int) -> ActiveTimer | None:
+    """
+    Retorna o cronômetro ativo do usuário se houver uma sessão em andamento.
+    """
+    stmt = select(ActiveTimer).where(ActiveTimer.user_id == user_id)
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def start_active_timer(
+    session: AsyncSession,
+    user_id: int,
+    subject: str,
+    chat_id: int | None = None,
+    message_id: int | None = None
+) -> ActiveTimer:
+    """
+    Inicia (ou substitui) um cronômetro ao vivo persistente no banco de dados.
+    """
+    existing = await get_active_timer(session, user_id)
+    if existing:
+        existing.subject = subject
+        existing.start_time = datetime.utcnow()
+        existing.chat_id = chat_id
+        existing.message_id = message_id
+        await session.commit()
+        await session.refresh(existing)
+        return existing
+
+    timer = ActiveTimer(
+        user_id=user_id,
+        subject=subject,
+        start_time=datetime.utcnow(),
+        chat_id=chat_id,
+        message_id=message_id
+    )
+    session.add(timer)
+    await session.commit()
+    await session.refresh(timer)
+    return timer
+
+
+async def stop_active_timer(session: AsyncSession, user_id: int) -> tuple[ActiveTimer | None, int]:
+    """
+    Encerra o cronômetro ativo, removendo-o da tabela e calculando a duração em minutos.
+    Retorna (timer_info, minutos_decorridos).
+    """
+    timer = await get_active_timer(session, user_id)
+    if not timer:
+        return None, 0
+
+    elapsed_seconds = (datetime.utcnow() - timer.start_time).total_seconds()
+    elapsed_minutes = max(1, int(round(elapsed_seconds / 60)))
+
+    # Copiamos as informações antes de apagar do banco
+    copied_timer = ActiveTimer(
+        user_id=timer.user_id,
+        subject=timer.subject,
+        start_time=timer.start_time,
+        chat_id=timer.chat_id,
+        message_id=timer.message_id
+    )
+
+    await session.delete(timer)
+    await session.commit()
+
+    return copied_timer, elapsed_minutes
+
+
+async def cancel_active_timer(session: AsyncSession, user_id: int) -> bool:
+    """
+    Descarta o cronômetro ativo sem contabilizar horas de estudo.
+    """
+    stmt = delete(ActiveTimer).where(ActiveTimer.user_id == user_id)
+    result = await session.execute(stmt)
+    await session.commit()
+    return result.rowcount > 0
+
 
 
 

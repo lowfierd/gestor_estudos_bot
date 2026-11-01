@@ -12,9 +12,13 @@ from database import crud
 from utils.teclados import (
     SubjectCallback,
     DurationCallback,
+    TimerSubjectCallback,
     get_subjects_keyboard,
     get_durations_keyboard,
-    get_photo_prompt_keyboard
+    get_photo_prompt_keyboard,
+    get_study_mode_keyboard,
+    get_timer_subjects_keyboard,
+    get_active_timer_keyboard
 )
 
 logger = logging.getLogger("RegistrarHandler")
@@ -108,8 +112,47 @@ async def forward_to_evidence_channel(
 @router.message(Command("estudar"))
 async def cmd_estudar(message: Message, state: FSMContext):
     """
-    Inicia o fluxo de registro de estudo via teclado inline.
-    Exibe as 6 disciplinas mais usadas, com botão de ver mais caso haja outras.
+    Ponto de entrada do registro de estudo:
+    1. Se já tiver um cronômetro rodando, mostra o status dele e opção de concluir.
+    2. Se não tiver, oferece escolher entre Cronômetro ao Vivo ou Registro Manual.
+    """
+    await state.clear()
+    user = message.from_user
+
+    async with async_session() as session:
+        active = await crud.get_active_timer(session, user.id)
+
+    if active:
+        elapsed_seconds = (datetime.utcnow() - active.start_time).total_seconds()
+        elapsed_m = max(1, int(round(elapsed_seconds / 60)))
+        duration_str = format_duration(elapsed_m)
+        await message.answer(
+            text=(
+                f"⏱️ *Você já está com um Cronômetro Ativo!*\n\n"
+                f"📚 Disciplina: *{active.subject}*\n"
+                f"⏳ Tempo em foco: *{duration_str}*\n"
+                f"⚡ Status: 🟢 Em andamento...\n\n"
+                f"Deseja concluir sua sessão agora?"
+            ),
+            parse_mode="Markdown",
+            reply_markup=get_active_timer_keyboard()
+        )
+        return
+
+    await message.answer(
+        text=(
+            f"📖 *Hora de registrar seu progresso, {user.first_name}!*\n\n"
+            f"Como você deseja registrar seus estudos agora?"
+        ),
+        parse_mode="Markdown",
+        reply_markup=get_study_mode_keyboard()
+    )
+
+
+@router.callback_query(F.data == "mode_manual")
+async def process_mode_manual(callback: CallbackQuery, state: FSMContext):
+    """
+    Inicia o fluxo tradicional de escolha manual da matéria e duração.
     """
     await state.clear()
     await state.set_state(StudyRegistrationFSM.choosing_subject)
@@ -118,13 +161,13 @@ async def cmd_estudar(message: Message, state: FSMContext):
         top_names, all_names = await crud.get_top_and_all_subjects(session, top_limit=6)
 
     has_more = len(all_names) > len(top_names)
-
-    await message.answer(
-        text="📖 *Hora de registrar seu progresso!*\n\n"
+    await callback.message.edit_text(
+        text="📝 *Registro Manual*\n\n"
              "Selecione abaixo a *disciplina* que você estudou:",
         parse_mode="Markdown",
         reply_markup=get_subjects_keyboard(subjects=top_names, has_more=has_more, show_all=False)
     )
+    await callback.answer()
 
 
 @router.callback_query(F.data == "show_more_subjects", StudyRegistrationFSM.choosing_subject)
@@ -341,7 +384,287 @@ async def process_cancel(callback: CallbackQuery, state: FSMContext):
     """
     await state.clear()
     await callback.message.edit_text(
-        text="❌ Registro de estudos cancelado.",
+        text="❌ Ação cancelada.",
         reply_markup=None
     )
     await callback.answer()
+
+
+# =========================================================
+# FLUXO DO CRONÔMETRO AO VIVO ("Começar agora" / "Terminar")
+# =========================================================
+
+@router.message(Command("foco", "timer", "cronometro"))
+async def cmd_foco_timer(message: Message, state: FSMContext):
+    """
+    Comando direto para iniciar ou consultar o cronômetro ao vivo.
+    """
+    await state.clear()
+    user = message.from_user
+
+    async with async_session() as session:
+        active = await crud.get_active_timer(session, user.id)
+
+    if active:
+        elapsed_seconds = (datetime.utcnow() - active.start_time).total_seconds()
+        elapsed_m = max(1, int(round(elapsed_seconds / 60)))
+        duration_str = format_duration(elapsed_m)
+        await message.answer(
+            text=(
+                f"⏱️ *Cronômetro em Andamento!*\n\n"
+                f"👤 Estudante: *{user.first_name}*\n"
+                f"📚 Disciplina: *{active.subject}*\n"
+                f"⏳ Tempo em foco até agora: *{duration_str}*\n"
+                f"⚡ Status: 🟢 Modo Foco ativo!\n\n"
+                f"Clique em *Concluir Estudo* quando terminar ou *Ver Tempo Decorrido* para atualizar:"
+            ),
+            parse_mode="Markdown",
+            reply_markup=get_active_timer_keyboard()
+        )
+        return
+
+    async with async_session() as session:
+        top_names, all_names = await crud.get_top_and_all_subjects(session, top_limit=6)
+
+    has_more = len(all_names) > len(top_names)
+    await message.answer(
+        text=(
+            f"⏱️ *Iniciar Cronômetro de Foco*\n\n"
+            f"👤 Estudante: *{user.first_name}*\n"
+            f"Selecione abaixo a *disciplina* que você vai focar agora:"
+        ),
+        parse_mode="Markdown",
+        reply_markup=get_timer_subjects_keyboard(subjects=top_names, has_more=has_more, show_all=False)
+    )
+
+
+@router.callback_query(F.data == "mode_timer")
+async def process_mode_timer(callback: CallbackQuery, state: FSMContext):
+    """
+    Acionado a partir do menu do /estudar para abrir a seleção de matéria do cronômetro.
+    """
+    await state.clear()
+    user = callback.from_user
+
+    async with async_session() as session:
+        active = await crud.get_active_timer(session, user.id)
+
+    if active:
+        elapsed_seconds = (datetime.utcnow() - active.start_time).total_seconds()
+        elapsed_m = max(1, int(round(elapsed_seconds / 60)))
+        duration_str = format_duration(elapsed_m)
+        await callback.message.edit_text(
+            text=(
+                f"⏱️ *Cronômetro em Andamento!*\n\n"
+                f"👤 Estudante: *{user.first_name}*\n"
+                f"📚 Disciplina: *{active.subject}*\n"
+                f"⏳ Tempo em foco: *{duration_str}*\n"
+                f"⚡ Status: 🟢 Ativo!\n\n"
+                f"Deseja finalizar ou atualizar?"
+            ),
+            parse_mode="Markdown",
+            reply_markup=get_active_timer_keyboard()
+        )
+        await callback.answer()
+        return
+
+    async with async_session() as session:
+        top_names, all_names = await crud.get_top_and_all_subjects(session, top_limit=6)
+
+    has_more = len(all_names) > len(top_names)
+    await callback.message.edit_text(
+        text=(
+            f"⏱️ *Iniciar Cronômetro de Foco*\n\n"
+            f"Selecione a *disciplina* para começar:"
+        ),
+        parse_mode="Markdown",
+        reply_markup=get_timer_subjects_keyboard(subjects=top_names, has_more=has_more, show_all=False)
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "timer_more_subjects")
+async def process_timer_more_subjects(callback: CallbackQuery):
+    async with async_session() as session:
+        top_names, all_names = await crud.get_top_and_all_subjects(session, top_limit=6)
+
+    await callback.message.edit_text(
+        text="⏱️ *Todas as Disciplinas para Foco:*\n\nSelecione a disciplina:",
+        parse_mode="Markdown",
+        reply_markup=get_timer_subjects_keyboard(subjects=all_names, has_more=False, show_all=True)
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "timer_top_subjects")
+async def process_timer_top_subjects(callback: CallbackQuery):
+    async with async_session() as session:
+        top_names, all_names = await crud.get_top_and_all_subjects(session, top_limit=6)
+
+    has_more = len(all_names) > len(top_names)
+    await callback.message.edit_text(
+        text="⏱️ *Iniciar Cronômetro de Foco*\n\nSelecione a disciplina para começar:",
+        parse_mode="Markdown",
+        reply_markup=get_timer_subjects_keyboard(subjects=top_names, has_more=has_more, show_all=False)
+    )
+    await callback.answer()
+
+
+@router.callback_query(TimerSubjectCallback.filter())
+async def process_timer_subject_chosen(callback: CallbackQuery, callback_data: TimerSubjectCallback, state: FSMContext):
+    """
+    Inicia o cronômetro após a escolha da matéria e salva o estado persistente no banco de dados.
+    """
+    subject_name = callback_data.name
+    user = callback.from_user
+
+    async with async_session() as session:
+        await crud.start_active_timer(
+            session=session,
+            user_id=user.id,
+            subject=subject_name,
+            chat_id=callback.message.chat.id,
+            message_id=callback.message.message_id
+        )
+
+    now_str = datetime.now().strftime("%H:%M")
+
+    # Se estiver num grupo compartilhado, envia um aviso motivacional
+    if callback.message.chat.type in ["group", "supergroup"]:
+        try:
+            await callback.message.chat.send_message(
+                f"🚀 *{user.first_name}* acabou de iniciar uma sessão de foco em *{subject_name}*! Força! 📚🔥",
+                parse_mode="Markdown"
+            )
+        except Exception:
+            pass
+
+    await callback.message.edit_text(
+        text=(
+            f"⏱️ *Sessão de Foco Iniciada!* 🟢\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 *Estudante:* {user.first_name}\n"
+            f"📚 *Disciplina:* {subject_name}\n"
+            f"🕒 *Início:* {now_str}\n"
+            f"⚡ *Status:* Concentração máxima ativada!\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"💡 _Deixe o celular de lado e bons estudos! Quando terminar, basta clicar em Concluir Estudo abaixo._"
+        ),
+        parse_mode="Markdown",
+        reply_markup=get_active_timer_keyboard()
+    )
+    await callback.answer(f"Modo Foco iniciado em {subject_name}!", show_alert=False)
+
+
+@router.callback_query(F.data == "refresh_timer")
+async def process_refresh_timer(callback: CallbackQuery):
+    """
+    Atualiza o tempo decorrido do cronômetro.
+    """
+    user = callback.from_user
+    async with async_session() as session:
+        active = await crud.get_active_timer(session, user.id)
+
+    if not active:
+        await callback.answer("Nenhum cronômetro ativo no momento.", show_alert=True)
+        return
+
+    seconds = int((datetime.utcnow() - active.start_time).total_seconds())
+    h = seconds // 3600
+    m = (seconds % 3600) // 60
+    s = seconds % 60
+
+    if h > 0:
+        time_text = f"{h}h {m}min {s}s"
+    else:
+        time_text = f"{m}min {s}s"
+
+    await callback.answer(f"⏳ Tempo em foco: {time_text}!", show_alert=True)
+
+
+@router.message(Command("parar", "concluir"))
+async def cmd_parar(message: Message, state: FSMContext):
+    """
+    Comando para parar o cronômetro diretamente via texto.
+    """
+    user = message.from_user
+    async with async_session() as session:
+        timer_info, elapsed_minutes = await crud.stop_active_timer(session, user.id)
+
+    if not timer_info:
+        await message.answer("⚠️ Você não tem nenhum cronômetro de estudo ativo no momento. Use `/foco` para iniciar!")
+        return
+
+    await state.update_data(chosen_subject=timer_info.subject, chosen_duration=elapsed_minutes)
+    await state.set_state(StudyRegistrationFSM.waiting_photo)
+
+    duration_str = format_duration(elapsed_minutes)
+    await message.answer(
+        text=(
+            f"🎉 *Sessão de Foco Concluída!* 🏁\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 Estudante: *{user.first_name}*\n"
+            f"📚 Disciplina: *{timer_info.subject}*\n"
+            f"⏱️ Tempo total de foco: *{duration_str}*\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📸 *Comprovante de Estudos (Opcional):*\n"
+            f"Envie uma *foto* agora para registrar seus estudos no canal oficial do casal, ou clique em *Pular Foto* abaixo:"
+        ),
+        parse_mode="Markdown",
+        reply_markup=get_photo_prompt_keyboard()
+    )
+
+
+@router.callback_query(F.data == "stop_timer")
+async def process_stop_timer(callback: CallbackQuery, state: FSMContext):
+    """
+    Encerra o cronômetro ao vivo pelo botão inline e direciona para comprovante ou salvar.
+    """
+    user = callback.from_user
+    async with async_session() as session:
+        timer_info, elapsed_minutes = await crud.stop_active_timer(session, user.id)
+
+    if not timer_info:
+        await callback.answer("Nenhum cronômetro ativo encontrado.", show_alert=True)
+        return
+
+    await state.update_data(chosen_subject=timer_info.subject, chosen_duration=elapsed_minutes)
+    await state.set_state(StudyRegistrationFSM.waiting_photo)
+
+    duration_str = format_duration(elapsed_minutes)
+    await callback.message.edit_text(
+        text=(
+            f"🎉 *Sessão de Foco Concluída!* 🏁\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 Estudante: *{user.first_name}*\n"
+            f"📚 Disciplina: *{timer_info.subject}*\n"
+            f"⏱️ Tempo total de foco: *{duration_str}*\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📸 *Comprovante de Estudos (Opcional):*\n"
+            f"Envie uma *foto* do que você estudou agora (com ou sem legenda) ou clique no botão abaixo para salvar direto:"
+        ),
+        parse_mode="Markdown",
+        reply_markup=get_photo_prompt_keyboard()
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "cancel_timer")
+async def process_cancel_timer(callback: CallbackQuery):
+    """
+    Cancela o cronômetro ativo sem salvar no banco de dados.
+    """
+    user = callback.from_user
+    async with async_session() as session:
+        cancelled = await crud.cancel_active_timer(session, user.id)
+
+    if cancelled:
+        await callback.message.edit_text(
+            text="❌ *Cronômetro cancelado.* Nenhuma hora de estudo foi registrada.",
+            reply_markup=None,
+            parse_mode="Markdown"
+        )
+        await callback.answer("Cronômetro cancelado.")
+    else:
+        await callback.answer("Nenhum cronômetro ativo para cancelar.", show_alert=True)
+

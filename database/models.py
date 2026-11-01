@@ -107,6 +107,23 @@ class Subject(Base):
     def __repr__(self) -> str:
         return f"<Subject id={self.id} name='{self.name}' use_count={self.use_count}>"
 
+class ActiveTimer(Base):
+    """
+    Armazena um cronômetro ao vivo em andamento para um usuário.
+    Garante persistência mesmo com reinicializações ou hibernação do servidor.
+    """
+    __tablename__ = "active_timers"
+
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    subject: Mapped[str] = mapped_column(String(100), nullable=False)
+    start_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    chat_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<ActiveTimer user_id={self.user_id} subject='{self.subject}' start_time={self.start_time}>"
+
 
 async def init_db() -> None:
     """

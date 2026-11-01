@@ -97,7 +97,9 @@ python bot.py
 | Comando | Descrição |
 |---|---|
 | `/start` | Apresenta o bot e cadastra o usuário no sistema automaticamente. |
-| `/estudar` | Inicia o fluxo interativo: exibe as 6 disciplinas mais estudadas (com opção de ver mais), tempo e foto de comprovante. |
+| `/foco` | Inicia o **cronômetro ao vivo** (ou `/timer` / `/cronometro`). |
+| `/parar` | Finaliza o cronômetro ativo e calcula o tempo total para salvar. |
+| `/estudar` | Menu de registro: escolher entre cronômetro ao vivo ou registro manual de tempo. |
 | `/addmateria` | Cadastra uma nova disciplina (ex: `/addmateria Economia`). |
 | `/removermateria` | Abre menu com botões para excluir uma disciplina em 1 clique. |
 | `/materias` | Lista todas as disciplinas e a contagem de vezes estudadas. |

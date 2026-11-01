@@ -12,6 +12,9 @@ class RemoveSubjectCallback(CallbackData, prefix="delsubj"):
 class DurationCallback(CallbackData, prefix="dur"):
     minutes: int
 
+class TimerSubjectCallback(CallbackData, prefix="tsubj"):
+    name: str
+
 # Opções de tempo disponíveis para estudo
 DURATION_OPTIONS = [
     ("⏱️ 30 min", 30),
@@ -119,3 +122,60 @@ def get_photo_prompt_keyboard() -> InlineKeyboardMarkup:
     builder.button(text="❌ Cancelar", callback_data="cancel_action")
     builder.adjust(1)
     return builder.as_markup()
+
+
+def get_study_mode_keyboard() -> InlineKeyboardMarkup:
+    """
+    Menu inicial ao acionar /estudar: oferece cronômetro ao vivo ou registro manual de tempo.
+    """
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⏱️ Iniciar Cronômetro ao Vivo", callback_data="mode_timer")
+    builder.button(text="📝 Registrar Tempo Manualmente", callback_data="mode_manual")
+    builder.button(text="❌ Cancelar", callback_data="cancel_action")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def get_timer_subjects_keyboard(
+    subjects: list[str],
+    has_more: bool = False,
+    show_all: bool = False
+) -> InlineKeyboardMarkup:
+    """
+    Gera o teclado para escolher a matéria especificamente para o cronômetro ao vivo.
+    """
+    builder = InlineKeyboardBuilder()
+
+    for subject in subjects:
+        builder.button(
+            text=f"📚 {subject}",
+            callback_data=TimerSubjectCallback(name=subject).pack()
+        )
+    builder.adjust(2)
+
+    if has_more and not show_all:
+        builder.row(
+            InlineKeyboardButton(text="📂 Ver mais disciplinas...", callback_data="timer_more_subjects")
+        )
+    elif show_all:
+        builder.row(
+            InlineKeyboardButton(text="📁 Mostrar menos disciplinas", callback_data="timer_top_subjects")
+        )
+
+    builder.row(
+        InlineKeyboardButton(text="❌ Cancelar", callback_data="cancel_action")
+    )
+    return builder.as_markup()
+
+
+def get_active_timer_keyboard() -> InlineKeyboardMarkup:
+    """
+    Painel de controle exibido enquanto o cronômetro está rodando.
+    """
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⏹️ Concluir Estudo", callback_data="stop_timer")
+    builder.button(text="🔄 Ver Tempo Decorrido", callback_data="refresh_timer")
+    builder.button(text="❌ Cancelar Cronômetro", callback_data="cancel_timer")
+    builder.adjust(1)
+    return builder.as_markup()
+

@@ -29,11 +29,17 @@ if CHANNEL_ID:
         # Se for string (ex: @canal_estudos), mantém string
         pass
 
-# URL de conexão do banco de dados (SQLite assíncrono padrão)
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite+aiosqlite:///{BASE_DIR / 'database' / 'gestor_estudos.db'}")
-# Render persistent storage (mount at /data)
-if os.getenv("RENDER"):
-    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:////data/gestor_estudos.db")
+# URL de conexão do banco de dados (SQLite assíncrono padrão ou PostgreSQL no Render)
+raw_db_url = os.getenv("DATABASE_URL")
+if raw_db_url:
+    if raw_db_url.startswith("postgresql://"):
+        DATABASE_URL = raw_db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    else:
+        DATABASE_URL = raw_db_url
+elif os.getenv("RENDER"):
+    DATABASE_URL = "sqlite+aiosqlite:////data/gestor_estudos.db"
+else:
+    DATABASE_URL = f"sqlite+aiosqlite:///{BASE_DIR / 'database' / 'gestor_estudos.db'}"
 
 if not BOT_TOKEN:
     print("[AVISO] BOT_TOKEN não foi configurado no arquivo .env!")

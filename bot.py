@@ -113,7 +113,8 @@ async def main():
         return
 
     # Inicializa as tabelas do banco de dados assíncrono
-    logger.info("Criando/verificando tabelas do banco de dados SQLite...")
+    db_type = "PostgreSQL" if "postgresql" in config.DATABASE_URL else "SQLite"
+    logger.info(f"Criando/verificando tabelas do banco de dados ({db_type})...")
     await init_db()
 
     # Configuração de Proxy (obrigatório para contas gratuitas do PythonAnywhere)
@@ -163,19 +164,30 @@ async def main():
 
     try:
         logger.info("Bot iniciado com sucesso! Aguardando mensagens...")
-        # Registro do webhook
         webhook_url = os.getenv("WEBHOOK_URL")
-        await bot.set_webhook(webhook_url)
-
-        async def telegram_webhook(request: web.Request):
-            update = await request.json()
-            # Convert dict to aiogram Update and pass bot reference
-            from aiogram.types import Update
-            await dp.feed_update(Update(**update), bot=bot)
-            return web.Response(text="OK")
+        if not webhook_url:
+            webhook_url = "https://gestor-estudos-bot.onrender.com/webhook"
+        logger.info(f"Configurando webhook para: {webhook_url}")
+        await bot.set_webhook(webhook_url, drop_pending_updates=True)
+        webhook_info = await bot.get_webhook_info()
+        logger.info(f"Webhook ativo no Telegram: {webhook_info.url} | Pendentes: {webhook_info.pending_update_count} | Erro: {webhook_info.last_error_message}")
 
         app = web.Application()
-        app.router.add_post("/webhook", telegram_webhook)
+
+        async def ping(request: web.Request):
+            return web.Response(text="pong")
+
+        app.router.add_get("/ping", ping)
+        app.router.add_get("/", ping)
+
+        from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+        webhook_requests_handler = SimpleRequestHandler(
+            dispatcher=dp,
+            bot=bot,
+        )
+        webhook_requests_handler.register(app, path="/webhook")
+        setup_application(app, dp, bot=bot)
+
         runner = web.AppRunner(app)
         await runner.setup()
         port = int(os.getenv("PORT", 8080))

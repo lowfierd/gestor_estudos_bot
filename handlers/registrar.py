@@ -532,12 +532,15 @@ async def process_timer_subject_chosen(callback: CallbackQuery, callback_data: T
     # Se estiver num grupo compartilhado, envia um aviso motivacional
     if callback.message.chat.type in ["group", "supergroup"]:
         try:
-            await callback.message.chat.send_message(
-                f"🚀 *{user.first_name}* acabou de iniciar uma sessão de foco em *{subject_name}*! Força! 📚🔥",
+            thread_id = getattr(callback.message, "message_thread_id", None)
+            await callback.bot.send_message(
+                chat_id=callback.message.chat.id,
+                message_thread_id=thread_id,
+                text=f"🚀 *{user.first_name}* acabou de iniciar uma sessão de foco em *{subject_name}*! Força! 📚🔥",
                 parse_mode="Markdown"
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Não foi possível enviar aviso no grupo: {e}")
 
     await callback.message.edit_text(
         text=(

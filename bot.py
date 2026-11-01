@@ -3,7 +3,8 @@ import logging
 from datetime import date
 import os
 from pathlib import Path
-from aiogram import Bot, Dispatcher, web
+from aiogram import Bot, Dispatcher
+from aiohttp import web
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession

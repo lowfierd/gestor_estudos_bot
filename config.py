@@ -31,6 +31,9 @@ if CHANNEL_ID:
 
 # URL de conexão do banco de dados (SQLite assíncrono padrão)
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite+aiosqlite:///{BASE_DIR / 'database' / 'gestor_estudos.db'}")
+# Render persistent storage (mount at /data)
+if os.getenv("RENDER"):
+    DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:////data/gestor_estudos.db")
 
 if not BOT_TOKEN:
     print("[AVISO] BOT_TOKEN não foi configurado no arquivo .env!")

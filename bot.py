@@ -3,7 +3,7 @@ import logging
 from datetime import date
 import os
 from pathlib import Path
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, web
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -160,11 +160,28 @@ async def main():
     scheduler.start()
     logger.info("APScheduler iniciado. Job das 20h00 agendado com sucesso no fuso de São Paulo.")
 
-    logger.info("Bot iniciado com sucesso! Aguardando mensagens...")
     try:
-        # Limpa eventuais updates acumulados enquanto o bot esteve offline
-        await bot.delete_webhook(drop_pending_updates=True)
-        await dp.start_polling(bot)
+        logger.info("Bot iniciado com sucesso! Aguardando mensagens...")
+        # Registro do webhook
+        webhook_url = os.getenv("WEBHOOK_URL")
+        await bot.set_webhook(webhook_url)
+
+        async def telegram_webhook(request: web.Request):
+            update = await request.json()
+            await dp.feed_update_bot(update)
+            return web.Response(text="OK")
+
+        app = web.Application()
+        app.router.add_post("/webhook", telegram_webhook)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        port = int(os.getenv("PORT", 8080))
+        site = web.TCPSite(runner, host="0.0.0.0", port=port)
+        await site.start()
+        logger.info(f"🚀 Webhook server rodando na porta {port}")
+
+        # Keep the bot running
+        await asyncio.Event().wait()
     finally:
         scheduler.shutdown()
         await bot.session.close()

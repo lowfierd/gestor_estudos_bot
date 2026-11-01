@@ -3,7 +3,8 @@ import logging
 from datetime import date
 import os
 from pathlib import Path
-from aiogram import Bot, Dispatcher
+from aiogram import Bot, Dispatcher, F
+from aiogram.types import Message, ErrorEvent
 from aiohttp import web
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
@@ -147,6 +148,20 @@ async def main():
     dp.include_router(registrar.router)
     dp.include_router(relatorios.router)
 
+    # Handler global de erros para debug
+    @dp.errors()
+    async def global_error_handler(event: ErrorEvent):
+        logger.error(f"[ERRO HANDLER] update_type={event.update.event_type} | erro={event.exception!r}")
+
+    # Catch-all para debug: loga TODA mensagem recebida (grupo e privado)
+    @dp.message()
+    async def debug_all_messages(message: Message):
+        logger.info(
+            f"[DEBUG] msg recebida | chat_type={message.chat.type} | "
+            f"chat_id={message.chat.id} | user={message.from_user.username} | "
+            f"text={message.text!r}"
+        )
+
     # Configuração do Agendador de Tarefas (APScheduler)
     scheduler = AsyncIOScheduler(timezone="America/Sao_Paulo")
     
@@ -198,7 +213,6 @@ async def main():
             bot=bot,
         )
         webhook_requests_handler.register(app, path="/webhook")
-        setup_application(app, dp, bot=bot)
 
         runner = web.AppRunner(app)
         await runner.setup()

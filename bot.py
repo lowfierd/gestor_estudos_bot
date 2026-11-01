@@ -169,7 +169,9 @@ async def main():
 
         async def telegram_webhook(request: web.Request):
             update = await request.json()
-            await dp.feed_update(update)
+            # Convert dict to aiogram Update and pass bot reference
+            from aiogram.types import Update
+            await dp.feed_update(Update(**update), bot=bot)
             return web.Response(text="OK")
 
         app = web.Application()

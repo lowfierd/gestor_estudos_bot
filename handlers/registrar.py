@@ -1,5 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import logging
+
+# Fuso horário de Brasília (UTC-3)
+BR_TZ = timezone(timedelta(hours=-3))
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -67,7 +70,7 @@ async def forward_to_evidence_channel(
         return
 
     duration_str = format_duration(minutes)
-    now_str = datetime.now().strftime("%d/%m/%Y às %H:%M")
+    now_str = datetime.now(tz=BR_TZ).strftime("%d/%m/%Y às %H:%M")
 
     caption_lines = [
         "📸 *NOVO REGISTRO DE ESTUDO CONFIRMADO!*",
@@ -527,7 +530,7 @@ async def process_timer_subject_chosen(callback: CallbackQuery, callback_data: T
             message_id=callback.message.message_id
         )
 
-    now_str = datetime.now().strftime("%H:%M")
+    now_str = datetime.now(tz=BR_TZ).strftime("%H:%M")
 
     # Se estiver num grupo compartilhado, envia um aviso motivacional
     if callback.message.chat.type in ["group", "supergroup"]:

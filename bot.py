@@ -169,7 +169,7 @@ async def main():
 
         async def telegram_webhook(request: web.Request):
             update = await request.json()
-            await dp.feed_update_bot(update)
+            await dp.feed_update(update)
             return web.Response(text="OK")
 
         app = web.Application()

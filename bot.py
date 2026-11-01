@@ -168,9 +168,21 @@ async def main():
         if not webhook_url:
             webhook_url = "https://gestor-estudos-bot.onrender.com/webhook"
         logger.info(f"Configurando webhook para: {webhook_url}")
-        await bot.set_webhook(webhook_url, drop_pending_updates=True)
+        await bot.set_webhook(
+            webhook_url,
+            drop_pending_updates=True,
+            allowed_updates=[
+                "message",
+                "edited_message",
+                "callback_query",
+                "inline_query",
+                "my_chat_member",
+                "chat_member",
+                "chat_join_request",
+            ]
+        )
         webhook_info = await bot.get_webhook_info()
-        logger.info(f"Webhook ativo no Telegram: {webhook_info.url} | Pendentes: {webhook_info.pending_update_count} | Erro: {webhook_info.last_error_message}")
+        logger.info(f"Webhook ativo: {webhook_info.url} | Pendentes: {webhook_info.pending_update_count} | Erro: {webhook_info.last_error_message} | Allowed: {webhook_info.allowed_updates}")
 
         app = web.Application()
 
